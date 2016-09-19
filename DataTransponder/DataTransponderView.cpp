@@ -78,10 +78,10 @@ void CDataTransponderView::OnInitialUpdate()
 	m_pListCtrl->InsertColumn(m_iNumColumns++, _T("D_P"), LVCFMT_CENTER, 60);
 	m_pListCtrl->InsertColumn(m_iNumColumns++, _T("S_Speed"), LVCFMT_CENTER, 120);
 	m_pListCtrl->InsertColumn(m_iNumColumns++, _T("D_Speed"), LVCFMT_CENTER, 120);
-	m_pListCtrl->InsertColumn(m_iNumColumns++, _T("TEST"), LVCFMT_CENTER, 120);
 	hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)ThreadRefushEditInfo, this, 0, &ThreadID);
 	// TODO: You may populate your ListView with items by directly accessing
 	//  its list control through a call to GetListCtrl().
+	SetTimer(1, 1000, NULL);
 }
 
 
@@ -153,8 +153,6 @@ void CDataTransponderView::OnFileNew()
 	m_pListCtrl->SetItemText(nRow, 4, m_strTmp);
 	m_pListCtrl->SetItemText(nRow, 5, _T("0"));
 	m_pListCtrl->SetItemText(nRow, 6, _T("0"));
-	m_pListCtrl->SetItemText(nRow, 7, _T("0"));
-	SetTimer(1,1000,NULL);
 }
 CString CDataTransponderView::GetSvrIPFrome(SocketMgr * pstuSkt, CString m_strKey,int &nPort, int& nRow)
 {
@@ -204,7 +202,7 @@ DWORD WINAPI ThreadRefushEditInfo(void * lPalramInfo)
 	SocketMgr * pstuSktCli;
 	SocketMgr * pstuSktNewCli;
 	SocketMgr * pstuSktNewDst;
-	int nSelectTimeOut = 500;
+	int nSelectTimeOut = 10;
 	CListCtrl * m_pListCtrl = NULL;
 	while (1)
 	{
@@ -286,59 +284,57 @@ void CDataTransponderView::OnTimer(UINT_PTR nIDEvent)
 	// TODO: Add your message handler code here and/or call default
 	SocketMgr * m_stuSktMgrTmp = m_stuSktMgr;
 	CListCtrl * m_pListCtrl = &GetListCtrl();
-	int nIndexCount = m_pListCtrl->GetItemCount();
-	int nRowNum = 0;
-	int nLine = 0;
+	int nRowNum = 0,nLine = 0;
 	CString m_DstIP,m_strTmp;
 	int nDstPort=0,nSpeed = 0;
 	if(1== nIDEvent)
 	{
-		if(nIndexCount>0)
-		{
-			m_strTmp=m_pListCtrl->GetItemText(0,7);
-			nSpeed = _wtoi(m_strTmp.GetBuffer());
-			m_strTmp.Format(_T("%d"),++nSpeed);
-			m_pListCtrl->SetItemText(0,7,m_strTmp);
-		}
 		while(NULL != m_stuSktMgrTmp)
 		{
-			nLine = 5;
-			m_DstIP = GetSvrIPFrome(m_stuSktMgrTmp,_T("C"), nDstPort, nRowNum);
+			if (1 == m_stuSktMgrTmp->nSvrFlg)
+			{
+				m_stuSktMgrTmp = m_stuSktMgrTmp->GetNextSkt();
+				continue;
+			}
+			if (2 == m_stuSktMgrTmp->nSvrFlg)
+			{
+				nLine = 5;
+				m_DstIP = GetSvrIPFrome(m_stuSktMgrTmp, _T("C"), nDstPort, nRowNum);
+			}
+			if (3 == m_stuSktMgrTmp->nSvrFlg)
+			{
+				nLine = 6;
+				m_DstIP = GetSvrIPFrome(m_stuSktMgrTmp->pCDstSocketMgr, _T("C"), nDstPort, nRowNum);
+			}
 			if (m_DstIP.IsEmpty())
 			{
-				nLine++;
-				m_DstIP = GetSvrIPFrome(m_stuSktMgrTmp->pCDstSocketMgr, _T("C"), nDstPort, nRowNum);
-				if (!m_DstIP.IsEmpty())
-				{
-					nSpeed = m_stuSktMgrTmp->pCDstSocketMgr->GetSpeed();
-				}
+				m_stuSktMgrTmp = m_stuSktMgrTmp->GetNextSkt();
+				continue;
+			}
+			nSpeed = m_stuSktMgrTmp->GetSpeed();
+			if(nSpeed<0)
+			{
+				m_stuSktMgrTmp = m_stuSktMgrTmp->GetNextSkt();
+				continue;
+			}
+
+			if (nSpeed>1024 * 1024 * 1024)
+			{
+				m_strTmp.Format(_T("%.2fGB"), (float)nSpeed / (1024 * 1024 * 1024));
+			}
+			else if (nSpeed>1024 * 1024)
+			{
+				m_strTmp.Format(_T("%.2fMB"), (float)nSpeed / (1024 * 1024));
+			}
+			else if (nSpeed>1024)
+			{
+				m_strTmp.Format(_T("%.2fKB"), (float)nSpeed / 1024);
 			}
 			else
 			{
-				nSpeed = m_stuSktMgrTmp->GetSpeed();
+				m_strTmp.Format(_T("%dByte"), nSpeed);
 			}
-			m_strTmp.Format(_T("Speed:%d"),nSpeed);
-			//MessageBox(m_strTmp);
-			if(nSpeed>=0)
-			{
-				m_strTmp.Empty();
-				if(nSpeed>1024*1024*1024)
-				{
-					m_strTmp.Format(_T("%.02fMB"), nSpeed/1024);
-				}
-				else if(nSpeed>1024*1024)
-				{
-					m_strTmp.Format(_T("%.02fKB"), nSpeed/1024);
-				}
-				else if(nSpeed>1024)
-				{
-					m_strTmp.Format(_T("%dByte"), nSpeed/1024);
-				}
-				if(!m_strTmp.IsEmpty())
-				{
-					m_pListCtrl->SetItemText(nRowNum, nLine, m_strTmp);
-				}
-			}
+			m_pListCtrl->SetItemText(--nRowNum, nLine, m_strTmp);
 			m_stuSktMgrTmp = m_stuSktMgrTmp->GetNextSkt();
 		}
 		return ;

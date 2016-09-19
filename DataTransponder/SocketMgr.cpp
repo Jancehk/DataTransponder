@@ -18,6 +18,7 @@ SocketMgr::SocketMgr(void)
 	pCDstSocketMgr = NULL;
 	pstrRecvData = NULL;
 	nRecvSize = 0;
+	nTotalSize = 0;
 	memset(strIPInfo, 0, sizeof(strIPInfo));
 	memset(strCliIPInfo, 0, sizeof(strCliIPInfo));
 }
@@ -152,13 +153,15 @@ int SocketMgr::CreateSkt(int nSvrPort, CString strIP)
 	nSvrFlg = 1; 
     sin.sin_family = AF_INET;  
     sin.sin_port = htons(nSvrPort);
-    sin.sin_addr.S_un.S_addr = INADDR_ANY;   
-    if(bind(nSkt_fd, (LPSOCKADDR)&sin, sizeof(sin)) == SOCKET_ERROR)  
+    sin.sin_addr.S_un.S_addr = INADDR_ANY;
+	nRtn = bind(nSkt_fd, (LPSOCKADDR)&sin, sizeof(sin));
+	if (nRtn == SOCKET_ERROR)
     {  
 		TRACE("bind error !\r\n");
         return nRtn;  
     }
-	if(listen(nSkt_fd, 50) == SOCKET_ERROR)  
+	nRtn = listen(nSkt_fd, 50);
+	if (nRtn == SOCKET_ERROR)
     {
 		TRACE("listen error !");
         return nRtn;  
@@ -285,7 +288,11 @@ SocketMgr* SocketMgr::SelectSkt(int nTimeOut)
 	select_timeout.tv_usec = 0;
 
 	//EsxMgr_logDebug("Select Time Out:%d Max fd:%d", nTimeOut, nMaxFdCount);
-
+	if (0 == nMaxFdCount)
+	{
+		Sleep(100);
+		return NULL;
+	}
 	select_num = select(nMaxFdCount, &read_fds, NULL, NULL, &select_timeout);
 	if (select_num < 0)
 	{
@@ -432,26 +439,49 @@ char * SocketMgr::RecvData(int &nRecvLen)
 	nRecvLen = nDataLen;
 	return pstrRecvDataBuffer;
 }
-
+int SocketMgr::GetSpeed()
+{
+	int			nRtnSize = nRecvSize - nTotalSize;
+	if (nTotalSize != nRecvSize)
+	{
+		nTotalSize = nRecvSize;
+		nTimes = 0;
+	}
+	else
+	{
+		nTimes++;
+		if (nTimes > 5)
+		{
+			nTotalSize = 0;
+			nRecvSize = 0;
+			nTimes = 0;
+		}
+	}
+	if (nRtnSize > 0)
+	{
+		return nRtnSize;
+	}
+	return 0;
+}
 int SocketMgr::TransData()
 {
 	int nRtn = -1;
 	int nRectDataLen = 0;
-	int nRecvSize = 5*1024*1024;
+	int nMallocSize = 5*1024*1024;
 	if (NULL == pCDstSocketMgr)
 	{
 		return -1;
 	}
 	if(NULL == pstrRecvData)
 	{
-		pstrRecvData = (char *)malloc(nRecvSize);
+		pstrRecvData = (char *)malloc(nMallocSize);
 		if (NULL == pstrRecvData )
 		{
 			return -1;
 		}
-		memset(pstrRecvData, 0, nRecvSize);
+		memset(pstrRecvData, 0, nMallocSize);
 	}
-	nRectDataLen = RecvData(pstrRecvData,nRecvSize,1);
+	nRectDataLen = RecvData(pstrRecvData, nMallocSize, 1);
 	if (0>nRectDataLen)
 	{
 		return -1;
