@@ -101,6 +101,8 @@ private:
 	SocketMgr* GetSktFD(fd_set *pread_fds);
 	int SetSendData(int nResult, char *pstrSendBuff, int nSendLen);
 	int RecvData(char * pstrDataBuffer, int nDataLen, int nType=0);
+	char *	pstrRecvData;
+	int		nRecvSize;
 public:
 	SocketMgr * pCDstSocketMgr;
 	int		nSvrFlg;
@@ -109,6 +111,8 @@ public:
 	SocketMgr* AcceptSkt();
 	SocketMgr * GetNewSkt();
 	SocketMgr * GetNewDst();
+	SocketMgr * GetNextSkt(){return pCNextSocketMgr; };
+	int GetSpeed(){int a=nRecvSize;nRecvSize=0;return a;};
 	int GetOptMode(int nType){return nOptMode&nType;}
 	void SetOptMode(int nType){nOptMode = htonl(nType);}
 	int SendData(char *pstrSendBuff, int nSendLen);

@@ -16,6 +16,8 @@ SocketMgr::SocketMgr(void)
 	pCPrevSocketMgr = NULL;
 	pCNextSocketMgr = NULL;
 	pCDstSocketMgr = NULL;
+	pstrRecvData = NULL;
+	nRecvSize = 0;
 	memset(strIPInfo, 0, sizeof(strIPInfo));
 	memset(strCliIPInfo, 0, sizeof(strCliIPInfo));
 }
@@ -47,6 +49,11 @@ SocketMgr::~SocketMgr(void)
 		pCDstSocketMgr->pCDstSocketMgr = NULL;
 		delete pCDstSocketMgr;
 		pCDstSocketMgr = NULL;
+	}
+	if(NULL != pstrRecvData)
+	{
+		free(pstrRecvData);
+		pstrRecvData = NULL;
 	}
 }
 
@@ -121,7 +128,7 @@ int SocketMgr::CreateSkt(char * pstrIP,int nPort)
 	setsockopt(nSkt_fd, SOL_SOCKET, SO_SNDTIMEO, (const char *)&timeout, sizeof(timeout));
 
 	setsockopt(nSkt_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&timeout, sizeof(timeout));
-
+	nSvrFlg = 3;
 	return 0;
 }
 
@@ -154,7 +161,7 @@ int SocketMgr::CreateSkt(int nSvrPort, CString strIP)
 	if(listen(nSkt_fd, 50) == SOCKET_ERROR)  
     {
 		TRACE("listen error !");
-        return 0;  
+        return nRtn;  
 	}
 	n_port = nSvrPort;
 	m_strIP = strIP;
@@ -198,9 +205,10 @@ int SocketMgr::CreateSkt(SocketMgr* pCSocketSvr)
 	setsockopt(nSkt_fd, SOL_SOCKET, SO_SNDTIMEO, (const char *)&timeout, sizeof(timeout));
 
 	setsockopt(nSkt_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&timeout, sizeof(timeout));
-	n_port = remoteAddr.sin_port;
+	n_port = ntohs(remoteAddr.sin_port);
 	inet_ntop(AF_INET, &remoteAddr.sin_addr.s_addr, strCliIPInfo, 16);
 	mbstowcs_s(&converted, m_strIP.GetBuffer(16), 16, strCliIPInfo, _TRUNCATE);
+	nSvrFlg = 2;
 	return 0;
 }
 
@@ -429,27 +437,29 @@ int SocketMgr::TransData()
 {
 	int nRtn = -1;
 	int nRectDataLen = 0;
-	char * pstrTmp = NULL;
+	int nRecvSize = 5*1024*1024;
 	if (NULL == pCDstSocketMgr)
 	{
 		return -1;
 	}
-	pstrTmp = (char *)malloc(4096);
-	if (NULL == pstrTmp )
+	if(NULL == pstrRecvData)
 	{
-		return -1;
+		pstrRecvData = (char *)malloc(nRecvSize);
+		if (NULL == pstrRecvData )
+		{
+			return -1;
+		}
+		memset(pstrRecvData, 0, nRecvSize);
 	}
-	memset(pstrTmp, 0, 4096);
-	nRectDataLen = RecvData(pstrTmp,4096,1);
+	nRectDataLen = RecvData(pstrRecvData,nRecvSize,1);
 	if (0>nRectDataLen)
 	{
 		return -1;
 	}
-	if (0 == pCDstSocketMgr->SendData(pstrTmp, nRectDataLen))
+	if (0 == pCDstSocketMgr->SendData(pstrRecvData, nRectDataLen))
 	{
 		nRtn= 0;
 	}
-	free(pstrTmp);
-	pstrTmp = NULL;
+	nRecvSize +=nRectDataLen;
 	return nRtn;
 }

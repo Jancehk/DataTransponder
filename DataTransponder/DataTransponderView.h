@@ -45,6 +45,7 @@ private:
 public:
 	SocketMgr * m_stuSktMgr;
 	CString GetSvrIPFrome(SocketMgr * pstuSkt, CString m_strKey, int &nPort, int& nRow);
+	afx_msg void OnTimer(UINT_PTR nIDEvent);
 };
 
 #ifndef _DEBUG  // debug version in DataTransponderView.cpp
