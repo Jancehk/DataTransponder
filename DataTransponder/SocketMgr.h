@@ -97,6 +97,7 @@ private:
 	void *		pstuUserInfo;
 	SocketMgr * pCPrevSocketMgr;
 	SocketMgr * pCNextSocketMgr;
+	int SetSktFD(fd_set *pread_fds);
 	int SetSktFD(fd_set *pread_fds, int nMaxfd);
 	SocketMgr* GetSktFD(fd_set *pread_fds);
 	int SetSendData(int nResult, char *pstrSendBuff, int nSendLen);
@@ -123,7 +124,7 @@ public:
 	int RecvHeadData();
 	char * RecvData(int &nRecvLen);
 	int TransData();
-	SocketMgr* SelectSkt(int nTimeOut);
+	SocketMgr* SelectSkt(int nTimeOut, int nType = 0);
 	/* Get user info Begin */
 	void * GetUserInf(){return pstuUserInfo;};
 	/* Get user info End */

@@ -5,13 +5,18 @@
 #include "SocketMgr.h"
 #pragma comment(lib,"ws2_32.lib")
 
+#define SKT_NUL_FLG		1
+#define SKT_SVR_FLG		1
+#define SKT_SRC_FLG		2
+#define SKT_DST_FLG		3
+
 SocketMgr::SocketMgr(void)
 {
 	nSkt_fd = 0;
 	n_port = 0;
 	m_strIP.Empty();
 	nOnlineState = 0;
-	nSvrFlg = 0;
+	nSvrFlg = SKT_NUL_FLG;
 	pstrRecvDataBuffer = NULL;
 	pCPrevSocketMgr = NULL;
 	pCNextSocketMgr = NULL;
@@ -63,7 +68,7 @@ SocketMgr::SocketMgr(SocketMgr* pCSocketMgr)
 {
 	nSkt_fd = 0;
 	nOnlineState = 0;
-	nSvrFlg = 0;
+	nSvrFlg = SKT_NUL_FLG;
 	pstrRecvDataBuffer = NULL;
 	pCPrevSocketMgr = NULL;
 	pCNextSocketMgr = NULL;
@@ -129,7 +134,7 @@ int SocketMgr::CreateSkt(char * pstrIP,int nPort)
 	setsockopt(nSkt_fd, SOL_SOCKET, SO_SNDTIMEO, (const char *)&timeout, sizeof(timeout));
 
 	setsockopt(nSkt_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&timeout, sizeof(timeout));
-	nSvrFlg = 3;
+	nSvrFlg = SKT_DST_FLG;
 	return 0;
 }
 
@@ -150,7 +155,7 @@ int SocketMgr::CreateSkt(int nSvrPort, CString strIP)
 		TRACE("create socket err!\r\n");
 		return nRtn;
 	}
-	nSvrFlg = 1; 
+	nSvrFlg = SKT_SVR_FLG; 
     sin.sin_family = AF_INET;  
     sin.sin_port = htons(nSvrPort);
     sin.sin_addr.S_un.S_addr = INADDR_ANY;
@@ -211,7 +216,7 @@ int SocketMgr::CreateSkt(SocketMgr* pCSocketSvr)
 	n_port = ntohs(remoteAddr.sin_port);
 	inet_ntop(AF_INET, &remoteAddr.sin_addr.s_addr, strCliIPInfo, 16);
 	mbstowcs_s(&converted, m_strIP.GetBuffer(16), 16, strCliIPInfo, _TRUNCATE);
-	nSvrFlg = 2;
+	nSvrFlg = SKT_SRC_FLG;
 	return 0;
 }
 
@@ -227,10 +232,27 @@ SocketMgr* SocketMgr::GetSktFD(fd_set *pread_fds)
 	}
 	return NULL;
 }
+int SocketMgr::SetSktFD(fd_set *pread_fds)
+{
+	int nMaxfd = 0;
+	FD_SET(nSkt_fd, pread_fds);
+	if(NULL != pCDstSocketMgr && SKT_SRC_FLG == nSvrFlg)
+	{
+		nMaxfd = pCDstSocketMgr->SetSktFD(pread_fds);
+	}
+	if(nMaxfd<nSkt_fd)
+	{
+		nMaxfd = nSkt_fd+1;
+	}
+	return nMaxfd;
+}
 int SocketMgr::SetSktFD(fd_set *pread_fds, int nMaxfd)
 {
 	//EsxMgr_logDebug("Add fd[%d] to Recd", nSkt_fd);
-	FD_SET(nSkt_fd, pread_fds);
+	if(SKT_SVR_FLG == nSvrFlg)
+	{
+		FD_SET(nSkt_fd, pread_fds);
+	}
 	if(NULL != pCNextSocketMgr)
 	{
 		if (nSkt_fd > nMaxfd)
@@ -275,7 +297,7 @@ SocketMgr* SocketMgr::AcceptSkt()
 	}
 	return pCSocketNewClient;
 }
-SocketMgr* SocketMgr::SelectSkt(int nTimeOut)
+SocketMgr* SocketMgr::SelectSkt(int nTimeOut,int nType)
 {
 	fd_set				read_fds;
 	struct timeval		select_timeout;
@@ -283,7 +305,15 @@ SocketMgr* SocketMgr::SelectSkt(int nTimeOut)
 	int					nMaxFdCount = 0;
 
 	FD_ZERO(&read_fds);
-	nMaxFdCount = SetSktFD(&read_fds, nMaxFdCount);
+	switch(nType)
+	{
+	case 0:
+		nMaxFdCount = SetSktFD(&read_fds, nMaxFdCount);
+		break;
+	case 1:
+		nMaxFdCount = SetSktFD(&read_fds);
+		break;
+	}
 	select_timeout.tv_sec  = nTimeOut;
 	select_timeout.tv_usec = 0;
 
