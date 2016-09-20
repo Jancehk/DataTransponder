@@ -44,7 +44,10 @@ private:
 	HANDLE hThread;
 public:
 	SocketMgr * m_stuSktMgr;
+	SocketMgr * m_stuSktMgrTmp;
 	CString GetSvrIPFrome(SocketMgr * pstuSkt, CString m_strKey, int &nPort, int& nRow);
+	int SetSpeedInItem(int nItem, int nSubItem, int nSpeed);
+	int GetSpeedInItem(int nItem, int nSubItem);
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
 };
 

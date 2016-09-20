@@ -35,6 +35,7 @@ CDataTransponderView::CDataTransponderView()
 	// TODO: add construction code here
 	hThread = 0;
 	m_stuSktMgr = NULL;
+	m_stuSktMgrTmp = NULL;
 }
 
 CDataTransponderView::~CDataTransponderView()
@@ -72,14 +73,15 @@ void CDataTransponderView::OnInitialUpdate()
 	//dwStyle |= LVS_EX_CHECKBOXES;
 	m_pListCtrl->SetExtendedStyle(dwStyle); 
 	//m_pListCtrl->InsertColumn(m_iNumColumns++, _T("ID"), LVCFMT_CENTER, 40);
-	m_pListCtrl->InsertColumn(m_iNumColumns++, _T("Type"), LVCFMT_CENTER, 60);
-	m_pListCtrl->InsertColumn(m_iNumColumns++, _T("SRC"), LVCFMT_CENTER, 300);
+	m_pListCtrl->InsertColumn(m_iNumColumns++, _T("Type"), LVCFMT_CENTER, 50);
+	m_pListCtrl->InsertColumn(m_iNumColumns++, _T("SRC"), LVCFMT_CENTER, 160);
 	m_pListCtrl->InsertColumn(m_iNumColumns++, _T("S_P"), LVCFMT_CENTER, 60);
-	m_pListCtrl->InsertColumn(m_iNumColumns++, _T("DST"), LVCFMT_CENTER, 300);
+	m_pListCtrl->InsertColumn(m_iNumColumns++, _T("DST"), LVCFMT_CENTER, 160);
 	m_pListCtrl->InsertColumn(m_iNumColumns++, _T("D_P"), LVCFMT_CENTER, 60);
 	m_pListCtrl->InsertColumn(m_iNumColumns++, _T("S_Speed"), LVCFMT_CENTER, 120);
 	m_pListCtrl->InsertColumn(m_iNumColumns++, _T("D_Speed"), LVCFMT_CENTER, 120);
-	m_pListCtrl->InsertColumn(m_iNumColumns++, _T("ThreadID"), LVCFMT_CENTER, 60);
+	m_pListCtrl->InsertColumn(m_iNumColumns++, _T("ThreadID"), LVCFMT_CENTER, 80);
+	m_pListCtrl->InsertColumn(m_iNumColumns++, _T("Error Info"), LVCFMT_CENTER, 300);
 	hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)ThreadListenCLient, this, 0, &ThreadID);
 	// TODO: You may populate your ListView with items by directly accessing
 	//  its list control through a call to GetListCtrl().
@@ -195,30 +197,88 @@ CString CDataTransponderView::GetSvrIPFrome(SocketMgr * pstuSkt, CString m_strKe
 	return m_pListCtrl->GetItemText(nRow++, 3);
 }
 
+int CDataTransponderView::SetSpeedInItem(int nItem, int nSubItem, int nSpeed)
+{
+	CString m_strTmp;
+	CListCtrl * m_pListCtrl = &GetListCtrl();
+	int nPrevSpeed = 0;
+	/*if (nSpeed<=100)
+	{
+		nPrevSpeed = GetSpeedInItem(nItem, nSubItem);
+		if (nSpeed < nPrevSpeed)
+		{
+			nSpeed = nPrevSpeed - nPrevSpeed / 7;
+		}
+	}*/
+	if (nSpeed>1024 * 1024 * 1024)
+	{
+		m_strTmp.Format(_T("%.2fGB"), (float)nSpeed / (1024 * 1024 * 1024));
+	}
+	else if (nSpeed>1024 * 1024)
+	{
+		m_strTmp.Format(_T("%.2fMB"), (float)nSpeed / (1024 * 1024));
+	}
+	else if (nSpeed>1024)
+	{
+		m_strTmp.Format(_T("%.2fKB"), (float)nSpeed / 1024);
+	}
+	else
+	{
+		m_strTmp.Format(_T("%dByte"), nSpeed);
+	}
+	m_pListCtrl->SetItemText(nItem, nSubItem, m_strTmp);
+	return 0;
+}
+int CDataTransponderView::GetSpeedInItem(int nItem, int nSubItem)
+{
+	CString m_strTmp;
+	CListCtrl * m_pListCtrl = &GetListCtrl();
+	m_strTmp = m_pListCtrl->GetItemText(nItem, nSubItem);
+	if (m_strTmp.IsEmpty())
+	{
+		return 0;
+	}
+	if (m_strTmp.Find(_T("GB")) > 0)
+	{
+		return int(_wtof(m_strTmp.GetBuffer()) * 1024 * 1024*1024);
+	}
+	else if (m_strTmp.Find(_T("MB")) > 0)
+	{
+		return int(_wtof(m_strTmp.GetBuffer()) * 1024 * 1024) ;
+	}
+	else if (m_strTmp.Find(_T("KB")) > 0)
+	{
+		return int(_wtof(m_strTmp.GetBuffer()) * 1024 );
+	}
+	else if (m_strTmp.Find(_T("Byte")) > 0)
+	{
+		return _wtoi(m_strTmp.GetBuffer());
+	}
+	return 0;
+}
 
 void CDataTransponderView::OnTimer(UINT_PTR nIDEvent)
 {
 	// TODO: Add your message handler code here and/or call default
 	SocketMgr * m_stuSktMgrTmp = m_stuSktMgr;
-	CListCtrl * m_pListCtrl = &GetListCtrl();
 	int nRowNum = 0,nLine = 0;
-	CString m_DstIP,m_strTmp;
+	CString m_DstIP;
 	int nDstPort=0,nSpeed = 0;
 	if(1== nIDEvent)
 	{
 		while(NULL != m_stuSktMgrTmp)
 		{
-			if (1 == m_stuSktMgrTmp->nSvrFlg)
+			if (SKT_SVR_FLG == m_stuSktMgrTmp->nSvrFlg)
 			{
 				m_stuSktMgrTmp = m_stuSktMgrTmp->GetNextSkt();
 				continue;
 			}
-			if (2 == m_stuSktMgrTmp->nSvrFlg)
+			if (SKT_SRC_FLG == m_stuSktMgrTmp->nSvrFlg)
 			{
 				nLine = 5;
 				m_DstIP = GetSvrIPFrome(m_stuSktMgrTmp, _T("C"), nDstPort, nRowNum);
 			}
-			if (3 == m_stuSktMgrTmp->nSvrFlg)
+			if (SKT_DST_FLG == m_stuSktMgrTmp->nSvrFlg)
 			{
 				nLine = 6;
 				m_DstIP = GetSvrIPFrome(m_stuSktMgrTmp->pCDstSocketMgr, _T("C"), nDstPort, nRowNum);
@@ -234,24 +294,8 @@ void CDataTransponderView::OnTimer(UINT_PTR nIDEvent)
 				m_stuSktMgrTmp = m_stuSktMgrTmp->GetNextSkt();
 				continue;
 			}
+			SetSpeedInItem(nRowNum-1, nLine, nSpeed);
 
-			if (nSpeed>1024 * 1024 * 1024)
-			{
-				m_strTmp.Format(_T("%.2fGB"), (float)nSpeed / (1024 * 1024 * 1024));
-			}
-			else if (nSpeed>1024 * 1024)
-			{
-				m_strTmp.Format(_T("%.2fMB"), (float)nSpeed / (1024 * 1024));
-			}
-			else if (nSpeed>1024)
-			{
-				m_strTmp.Format(_T("%.2fKB"), (float)nSpeed / 1024);
-			}
-			else
-			{
-				m_strTmp.Format(_T("%dByte"), nSpeed);
-			}
-			m_pListCtrl->SetItemText(--nRowNum, nLine, m_strTmp);
 			m_stuSktMgrTmp = m_stuSktMgrTmp->GetNextSkt();
 		}
 		return ;
@@ -263,6 +307,7 @@ DWORD WINAPI ThreadListenCLient(void * lParamInfo)
 {
 	CDataTransponderView *  pView = (CDataTransponderView*)lParamInfo;
 	CString m_DstIP, m_strTmp;
+	DWORD	ThreadID = 0;
 	int		nDstPort;
 	int		nRowNum = 0, nRow = 0;
 	SocketMgr * pstuSktCli;
@@ -270,47 +315,64 @@ DWORD WINAPI ThreadListenCLient(void * lParamInfo)
 	SocketMgr * pstuSktNewDst;
 	int nSelectTimeOut = 10;
 	CListCtrl * m_pListCtrl = NULL;
+	if (NULL == pView )
+	{
+		return -1;
+	}
+	while (NULL == pView->m_stuSktMgr)
+	{
+		Sleep(1000);
+	}
+	m_pListCtrl = &pView->GetListCtrl();
+	if (NULL == m_pListCtrl)
+	{
+		return -2;
+	}
 	while (1)
 	{
-		if (NULL == pView ||
-			NULL == pView->m_stuSktMgr)
-		{
-			Sleep(500);
-			continue;
-		}
-		if (NULL == m_pListCtrl)
-		{
-			m_pListCtrl = &pView->GetListCtrl();
-		}
 		pstuSktCli = pView->m_stuSktMgr->SelectSkt(nSelectTimeOut);
 		if (NULL == pstuSktCli)
 		{
 			continue;
 		}
-		if (1 != pstuSktCli->nSvrFlg)
+		if (SKT_SVR_FLG != pstuSktCli->nSvrFlg)
 		{
+			m_strTmp.Format(_T("Skt%p[%s:%d] Flg is incorrect[%d]"), pstuSktCli, pstuSktCli->m_strIP, pstuSktCli->n_port, pstuSktCli->nSvrFlg);
+			m_pListCtrl->SetItemText(0, 8, m_strTmp);
 			continue;
 		}
 
 		pstuSktNewCli = pstuSktCli->AcceptSkt();
 		if (NULL == pstuSktNewCli)
 		{
+			m_strTmp.Format(_T("Skt%p[%s:%d] accept new client faild"), pstuSktCli, pstuSktCli->m_strIP, pstuSktCli->n_port);
+			m_pListCtrl->SetItemText(0, 8, m_strTmp);
 			continue;
+		}
+		while (NULL != pView->m_stuSktMgrTmp)
+		{
+			Sleep(1000);
 		}
 		pstuSktNewDst = pstuSktNewCli->GetNewDst();
 		if (NULL == pstuSktNewDst)
 		{
+			m_strTmp.Format(_T("Skt%p[%s:%d]->%p get new dst client faild"), pstuSktCli, pstuSktCli->m_strIP, pstuSktCli->n_port, pstuSktNewCli);
+			m_pListCtrl->SetItemText(0, 8, m_strTmp);
 			continue;
 		}
 		m_DstIP = pView->GetSvrIPFrome(pstuSktCli, _T("S"), nDstPort, nRowNum);
 		if (m_DstIP.IsEmpty() || 0 == nDstPort || 0 == nRowNum)
 		{
+			m_strTmp.Format(_T("Skt%p[%s:%d] not found in list"), pstuSktCli, pstuSktCli->m_strIP, pstuSktCli->n_port);
+			m_pListCtrl->SetItemText(0, 8, m_strTmp);
 			delete pstuSktNewCli;
 			pstuSktNewCli = NULL;
 			continue;
 		}
 		if (0 != pstuSktNewDst->CreateSkt(m_DstIP, nDstPort))
 		{
+			m_strTmp.Format(_T("connect to [%s:%d] faild"), m_DstIP, nDstPort);
+			m_pListCtrl->SetItemText(nRowNum-1, 8, m_strTmp);
 			delete pstuSktNewCli;
 			pstuSktNewCli = NULL;
 			continue;
@@ -326,6 +388,11 @@ DWORD WINAPI ThreadListenCLient(void * lParamInfo)
 
 		m_pListCtrl->SetItemText(nRow, 5, _T("0"));
 		m_pListCtrl->SetItemText(nRow, 6, _T("0"));
+		pView->m_stuSktMgrTmp = pstuSktNewCli;
+		pstuSktNewCli->hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)ThreadDealClient, lParamInfo, 0, &ThreadID);
+
+		m_strTmp.Format(_T("%d"), ThreadID);
+		m_pListCtrl->SetItemText(nRow, 7, m_strTmp);
 	}
 	return 0;
 }
@@ -337,80 +404,47 @@ DWORD WINAPI ThreadDealClient(void * lParamInfo)
 	int		nRowNum = 0, nRow = 0;
 	SocketMgr * pstuSktCli;
 	SocketMgr * pstuSktNewCli;
-	SocketMgr * pstuSktNewDst;
 	int nSelectTimeOut = 10;
 	CListCtrl * m_pListCtrl = NULL;
+	if (NULL == pView ||
+		NULL == pView->m_stuSktMgrTmp)
+	{
+		return -1;
+	}
+	m_pListCtrl = &pView->GetListCtrl();
+	if (NULL == m_pListCtrl)
+	{
+		return -2;
+	}
+	pstuSktNewCli = pView->m_stuSktMgrTmp;
+	pView->m_stuSktMgrTmp = NULL;
 	while (1)
 	{
-		if (NULL == pView ||
-			NULL == pView->m_stuSktMgr)
-		{
-			Sleep(500);
-			continue;
-		}
-		if (NULL == m_pListCtrl)
-		{
-			m_pListCtrl = &pView->GetListCtrl();
-		}
-		pstuSktCli = pView->m_stuSktMgr->SelectSkt(nSelectTimeOut);
+		pstuSktCli = pstuSktNewCli->SelectSkt(nSelectTimeOut,1);
 		if (NULL == pstuSktCli)
 		{
 			continue;
 		}
-		if (1 != pstuSktCli->nSvrFlg)
-		{
-			if (0 != pstuSktCli->TransData())
-			{
-				m_DstIP = pView->GetSvrIPFrome(pstuSktCli,_T("C"), nDstPort, nRowNum);
-				if (m_DstIP.IsEmpty())
-				{
-					m_DstIP = pView->GetSvrIPFrome(pstuSktCli->pCDstSocketMgr, _T("C"), nDstPort, nRowNum);
-				}
-				if (0 != nRowNum)
-				{
-					m_pListCtrl->DeleteItem(--nRowNum);
-				}
-				delete pstuSktCli;
-				pstuSktCli = NULL;
-				continue;
-			}
-			continue;
-		}
-
-		pstuSktNewCli = pstuSktCli->AcceptSkt();
-		if (NULL == pstuSktNewCli)
+		if (SKT_SVR_FLG == pstuSktCli->nSvrFlg)
 		{
 			continue;
 		}
-		pstuSktNewDst = pstuSktNewCli->GetNewDst();
-		if (NULL == pstuSktNewDst)
+		if (0 == pstuSktCli->TransData())
 		{
 			continue;
 		}
-		m_DstIP = pView->GetSvrIPFrome(pstuSktCli, _T("S"), nDstPort, nRowNum);
-		if (m_DstIP.IsEmpty() || 0 == nDstPort || 0 == nRowNum)
+		m_DstIP = pView->GetSvrIPFrome(pstuSktCli, _T("C"), nDstPort, nRowNum);
+		if (m_DstIP.IsEmpty())
 		{
-			delete pstuSktNewCli;
-			pstuSktNewCli = NULL;
-			continue;
+			m_DstIP = pView->GetSvrIPFrome(pstuSktCli->pCDstSocketMgr, _T("C"), nDstPort, nRowNum);
 		}
-		if (0 != pstuSktNewDst->CreateSkt(m_DstIP, nDstPort))
+		if (0 != nRowNum)
 		{
-			delete pstuSktNewCli;
-			pstuSktNewCli = NULL;
-			continue;
+			m_pListCtrl->DeleteItem(--nRowNum);
 		}
-		nRow = m_pListCtrl->InsertItem(nRowNum, _T("C"));
-		m_pListCtrl->SetItemText(nRow, 1, pstuSktNewCli->m_strIP);
-		m_strTmp.Format(_T("%d"), pstuSktNewCli->n_port);
-		m_pListCtrl->SetItemText(nRow, 2, m_strTmp);
-
-		m_pListCtrl->SetItemText(nRow, 3, m_DstIP);
-		m_strTmp.Format(_T("%d"), nDstPort);
-		m_pListCtrl->SetItemText(nRow, 4, m_strTmp);
-
-		m_pListCtrl->SetItemText(nRow, 5, _T("0"));
-		m_pListCtrl->SetItemText(nRow, 6, _T("0"));
+		delete pstuSktCli;
+		pstuSktCli = NULL;
+		break;
 	}
 	return 0;
 }

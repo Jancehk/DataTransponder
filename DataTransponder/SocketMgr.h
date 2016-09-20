@@ -25,6 +25,10 @@
 #define		ESXSVR_OPT_SUB_GUEST		0x00030000
 
 
+#define SKT_NUL_FLG		0
+#define SKT_SVR_FLG		1
+#define SKT_SRC_FLG		2
+#define SKT_DST_FLG		3
 
 typedef struct ESXMGR_HEADER_T
 {
@@ -86,10 +90,7 @@ public:
 	
 private:
 	int		nSkt_fd;
-	int		nOptMode;
 	/* Esx Info Begin */
-	int			nEsxID;
-	char		nEsxState;
 	char		strIPInfo[32];
 	char		strCliIPInfo[32];
 	/* Esx Info End */
@@ -109,6 +110,7 @@ private:
 public:
 	SocketMgr * pCDstSocketMgr;
 	int		nSvrFlg;
+	HANDLE	hThread;
 	int		n_port;
 	CString m_strIP;
 	SocketMgr* AcceptSkt();
@@ -116,8 +118,6 @@ public:
 	SocketMgr * GetNewDst();
 	SocketMgr * GetNextSkt(){return pCNextSocketMgr; };
 	int GetSpeed();
-	int GetOptMode(int nType){return nOptMode&nType;}
-	void SetOptMode(int nType){nOptMode = htonl(nType);}
 	int SendData(char *pstrSendBuff, int nSendLen);
 	int SendData(char *pstrSendBuff);
 	int SendData(int nResult);
@@ -129,18 +129,9 @@ public:
 	void * GetUserInf(){return pstuUserInfo;};
 	/* Get user info End */
 	/* Esx Info Begin */
-	int GetEsxID(){ return nEsxID; };
-	char GetEsxState(){ return nEsxState; };
 	char* GetEsxIP(){ return strIPInfo; };
 	char* GetCliIP(){ return strCliIPInfo; };
-	void SetEsxID(int nSelectEsxID){ nEsxID = nSelectEsxID; }
-	void SetEsxState(char nSelectEsxStat){ nEsxState = nSelectEsxStat; }
 	void SetEsxIP(char *pstrEsxIPInfo){ strncpy_s(strIPInfo, pstrEsxIPInfo, 32); }
 	/* Esx Info End */
-private:
-	int nOnlineState;
-public:
-	void SetOnLine(void * pstrInUserInfo){pstuUserInfo=pstrInUserInfo;nOnlineState = 1;}
-	int  IsOnLine(void){return nOnlineState;}
 };
 

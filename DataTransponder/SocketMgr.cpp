@@ -5,17 +5,12 @@
 #include "SocketMgr.h"
 #pragma comment(lib,"ws2_32.lib")
 
-#define SKT_NUL_FLG		1
-#define SKT_SVR_FLG		1
-#define SKT_SRC_FLG		2
-#define SKT_DST_FLG		3
 
 SocketMgr::SocketMgr(void)
 {
 	nSkt_fd = 0;
 	n_port = 0;
 	m_strIP.Empty();
-	nOnlineState = 0;
 	nSvrFlg = SKT_NUL_FLG;
 	pstrRecvDataBuffer = NULL;
 	pCPrevSocketMgr = NULL;
@@ -24,10 +19,27 @@ SocketMgr::SocketMgr(void)
 	pstrRecvData = NULL;
 	nRecvSize = 0;
 	nTotalSize = 0;
+	hThread = 0;
 	memset(strIPInfo, 0, sizeof(strIPInfo));
 	memset(strCliIPInfo, 0, sizeof(strCliIPInfo));
 }
 
+SocketMgr::SocketMgr(SocketMgr* pCSocketMgr)
+{
+	nSkt_fd = 0;
+	nSvrFlg = SKT_NUL_FLG;
+	pstrRecvDataBuffer = NULL;
+	pCPrevSocketMgr = NULL;
+	pCNextSocketMgr = NULL;
+	hThread = 0;
+	if (NULL != pCSocketMgr->pCNextSocketMgr)
+	{
+		pCNextSocketMgr = pCSocketMgr->pCNextSocketMgr;
+		pCNextSocketMgr->pCPrevSocketMgr = this;
+	}
+	pCSocketMgr->pCNextSocketMgr = this;
+	pCPrevSocketMgr = pCSocketMgr;
+}
 
 SocketMgr::~SocketMgr(void)
 {
@@ -37,6 +49,11 @@ SocketMgr::~SocketMgr(void)
 		closesocket(nSkt_fd);
 		nSkt_fd =0;
 	}
+	/*if (0 != hThread)
+	{
+		TerminateThread(hThread, -1);
+		CloseHandle(hThread);
+	}*/
 	if(NULL != pstrRecvDataBuffer)
 	{
 		free(pstrRecvDataBuffer);
@@ -64,22 +81,6 @@ SocketMgr::~SocketMgr(void)
 }
 
 
-SocketMgr::SocketMgr(SocketMgr* pCSocketMgr)
-{
-	nSkt_fd = 0;
-	nOnlineState = 0;
-	nSvrFlg = SKT_NUL_FLG;
-	pstrRecvDataBuffer = NULL;
-	pCPrevSocketMgr = NULL;
-	pCNextSocketMgr = NULL;
-	if (NULL != pCSocketMgr->pCNextSocketMgr)
-	{
-		pCNextSocketMgr = pCSocketMgr->pCNextSocketMgr;
-		pCNextSocketMgr->pCPrevSocketMgr = this;
-	}
-	pCSocketMgr->pCNextSocketMgr = this;
-	pCPrevSocketMgr = pCSocketMgr;
-}
 int SocketMgr::CreateSkt(void)
 {
 	int nRtn = -1;
@@ -355,7 +356,6 @@ int SocketMgr::SetSendData(int nResult, char *pstrSendBuff, int nSendLen)
 	stuSendHead = (ESXMGR_HEADER *)pstrSend;
 	memcpy(stuSendHead->strSegName, SEGNAME, strlen(SEGNAME));
 	stuSendHead->nDataLen   = htonl(nSendLen);
-	stuSendHead->nOptMode	= nOptMode;
 	stuSendHead->nResult = htonl(nResult);
 	if(0 != nSendLen)
 	{
@@ -381,7 +381,6 @@ int SocketMgr::SendData(char *pstrSendBuff)
 }
 int SocketMgr::SendData(int nResult)
 {
-	SetOptMode(ESXSVR_OPT_RTN_MODE);
 	return SetSendData(nResult,NULL,0);
 }
 int SocketMgr::RecvData(char * pstrDataBuffer, int nDataLen,int nType)
@@ -435,7 +434,6 @@ int SocketMgr::RecvHeadData()
 		return -1;
 	}
 	//SetEsxErrorCode(ntohl(stuSendHead.nResult));
-	nOptMode  = ntohl(stuSendHead.nOptMode);
 	stuSendHead.nDataLen = ntohl(stuSendHead.nDataLen);
 	return stuSendHead.nDataLen;
 }
