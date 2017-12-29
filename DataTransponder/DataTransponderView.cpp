@@ -26,6 +26,9 @@ IMPLEMENT_DYNCREATE(CDataTransponderView, CListView)
 BEGIN_MESSAGE_MAP(CDataTransponderView, CListView)
 	ON_COMMAND(ID_FILE_NEW, &CDataTransponderView::OnFileNew)
 	ON_WM_TIMER()
+	ON_WM_RBUTTONDOWN()
+	ON_WM_RBUTTONDBLCLK()
+	ON_COMMAND(ID_VIEW_HIDDEN, &CDataTransponderView::OnViewHidden)
 END_MESSAGE_MAP()
 
 // CDataTransponderView construction/destruction
@@ -143,8 +146,11 @@ void CDataTransponderView::OnFileNew()
 	if(0 != m_stuSktMgrTmp->CreateSkt(m_setDlg.m_nSrcPort,m_setDlg.m_strSrcIP))
 	{
 		MessageBox(_T("socket bind faild"));
-		delete m_stuSktMgrTmp;
-		m_stuSktMgrTmp = NULL;
+		if (m_stuSktMgrTmp != m_stuSktMgr)
+		{
+			delete m_stuSktMgrTmp;
+			m_stuSktMgrTmp = NULL;
+		}
 		return ;
 	}
 	nIndexCount = m_pListCtrl->GetItemCount();
@@ -197,9 +203,102 @@ CString CDataTransponderView::GetSvrIPFrome(SocketMgr * pstuSkt, CString m_strKe
 	return m_pListCtrl->GetItemText(nRow++, 3);
 }
 
+void CDataTransponderView::OnRButtonDown(UINT nFlags, CPoint point)
+{
+	// TODO: Add your message handler code here and/or call default
+	CListView::OnRButtonDown(nFlags, point);
+}
+
+
+void CDataTransponderView::OnRButtonDblClk(UINT nFlags, CPoint point)
+{
+	// TODO: Add your message handler code here and/or call default
+	CListCtrl * m_pListCtrl = &GetListCtrl();
+	CString m_strTmp;
+	int nRow = (int)m_pListCtrl->GetFirstSelectedItemPosition() - 1;
+	m_strTmp = m_pListCtrl->GetItemText(nRow, 0);
+	if (m_strTmp == _T("S"))
+	{
+		m_pListCtrl->SetItemText(nRow, 7,_T("DEL"));
+	}
+	CListView::OnRButtonDblClk(nFlags, point);
+}
+
+void CDataTransponderView::OnViewHidden()
+{
+	// TODO: Add your command handler code here
+	CListCtrl * m_pListCtrl = &GetListCtrl();
+	int nIndexCount = m_pListCtrl->GetItemCount();
+	if(nIndexCount<=0)
+	{
+		return ;
+	}
+	AfxGetMainWnd()->ShowWindow(SW_HIDE);
+   // AfxGetMainWnd()->ShowWindow(HWNDCSW_SHOW); 
+
+}
+
+
+int CDataTransponderView::DelSvrInfo(void)
+{
+	CListCtrl * m_pListCtrl = &GetListCtrl();
+	int nIndexCount = m_pListCtrl->GetItemCount();
+	CString m_strTmp;
+	CString m_strIP;
+	int nPort=0;
+	int nRow = 0,nOldRow = -1;
+	int bClientDelflg = 0;
+	for (nRow = 0; nRow <nIndexCount; nRow++)
+	{
+		m_strIP = m_pListCtrl->GetItemText(nRow, 1);
+		m_strTmp = m_pListCtrl->GetItemText(nRow, 2);
+		nPort = _wtoi(m_strTmp.GetBuffer());
+		m_strTmp = m_pListCtrl->GetItemText(nRow, 0);
+		if (m_strTmp == _T("S"))
+		{
+			if(bClientDelflg == 1 && nOldRow >= 0)
+			{
+				m_pListCtrl->DeleteItem(nOldRow);
+				nOldRow = -1;
+			}
+			m_strTmp = m_pListCtrl->GetItemText(nRow, 7);
+			if (m_strTmp != _T("DEL") &&
+				m_strTmp != _T("DELETED"))
+			{
+				bClientDelflg = 0;
+				continue;
+			}
+			if(NULL != m_stuSktMgr)
+			{
+				m_stuSktMgr->SetSktFlg(m_strIP,nPort);
+			}
+			if(m_strTmp == _T("DEL"))
+			{
+				m_pListCtrl->SetItemText(nRow, 7,_T("DELETED"));
+			}
+			nOldRow = nRow;
+			bClientDelflg = 1;
+		}
+		else if(1 == bClientDelflg)
+		{
+			bClientDelflg = 2;
+			if(NULL != m_stuSktMgr)
+			{
+				m_stuSktMgr->SetSktFlg(m_strIP,nPort);
+			}
+		}
+	}
+	if(bClientDelflg == 1 && nOldRow >= 0)
+	{
+		m_pListCtrl->DeleteItem(nOldRow);
+		nOldRow = -1;
+	}
+	return 0;
+}
 int CDataTransponderView::SetSpeedInItem(int nItem, int nSubItem, int nSpeed)
 {
 	CString m_strTmp;
+	CString m_strTmpOld;
 	CListCtrl * m_pListCtrl = &GetListCtrl();
 	int nPrevSpeed = 0;
 	/*if (nSpeed<=100)
@@ -226,7 +325,11 @@ int CDataTransponderView::SetSpeedInItem(int nItem, int nSubItem, int nSpeed)
 	{
 		m_strTmp.Format(_T("%dByte"), nSpeed);
 	}
-	m_pListCtrl->SetItemText(nItem, nSubItem, m_strTmp);
+	m_strTmpOld = m_pListCtrl->GetItemText(nItem, nSubItem);
+	if(m_strTmpOld != m_strTmp)
+	{
+		m_pListCtrl->SetItemText(nItem, nSubItem, m_strTmp);
+	}
 	return 0;
 }
 int CDataTransponderView::GetSpeedInItem(int nItem, int nSubItem)
@@ -256,6 +359,7 @@ int CDataTransponderView::GetSpeedInItem(int nItem, int nSubItem)
 	}
 	return 0;
 }
+
 
 void CDataTransponderView::OnTimer(UINT_PTR nIDEvent)
 {
@@ -313,7 +417,7 @@ DWORD WINAPI ThreadListenCLient(void * lParamInfo)
 	SocketMgr * pstuSktCli;
 	SocketMgr * pstuSktNewCli;
 	SocketMgr * pstuSktNewDst;
-	int nSelectTimeOut = 10;
+	int nSelectTimeOut = 3;
 	CListCtrl * m_pListCtrl = NULL;
 	if (NULL == pView )
 	{
@@ -333,6 +437,7 @@ DWORD WINAPI ThreadListenCLient(void * lParamInfo)
 		pstuSktCli = pView->m_stuSktMgr->SelectSkt(nSelectTimeOut);
 		if (NULL == pstuSktCli)
 		{
+			pView->DelSvrInfo();
 			continue;
 		}
 		if (SKT_SVR_FLG != pstuSktCli->nSvrFlg)
@@ -341,7 +446,6 @@ DWORD WINAPI ThreadListenCLient(void * lParamInfo)
 			m_pListCtrl->SetItemText(0, 8, m_strTmp);
 			continue;
 		}
-
 		pstuSktNewCli = pstuSktCli->AcceptSkt();
 		if (NULL == pstuSktNewCli)
 		{
@@ -393,6 +497,7 @@ DWORD WINAPI ThreadListenCLient(void * lParamInfo)
 
 		m_strTmp.Format(_T("%d"), ThreadID);
 		m_pListCtrl->SetItemText(nRow, 7, m_strTmp);
+		pView->DelSvrInfo();
 	}
 	return 0;
 }
@@ -404,7 +509,7 @@ DWORD WINAPI ThreadDealClient(void * lParamInfo)
 	int		nRowNum = 0, nRow = 0;
 	SocketMgr * pstuSktCli;
 	SocketMgr * pstuSktNewCli;
-	int nSelectTimeOut = 10;
+	int nSelectTimeOut = 2;
 	CListCtrl * m_pListCtrl = NULL;
 	if (NULL == pView ||
 		NULL == pView->m_stuSktMgrTmp)
@@ -425,7 +530,8 @@ DWORD WINAPI ThreadDealClient(void * lParamInfo)
 		{
 			continue;
 		}
-		if (SKT_SVR_FLG == pstuSktCli->nSvrFlg)
+		if ( ((pstuSktCli->nSvrFlg&SKT_SRC_FLG) != SKT_SRC_FLG) &&
+			 ((pstuSktCli->nSvrFlg&SKT_DST_FLG) != SKT_DST_FLG) )
 		{
 			continue;
 		}
@@ -448,3 +554,4 @@ DWORD WINAPI ThreadDealClient(void * lParamInfo)
 	}
 	return 0;
 }
+

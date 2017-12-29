@@ -11,7 +11,7 @@ SocketMgr::SocketMgr(void)
 	nSkt_fd = 0;
 	n_port = 0;
 	m_strIP.Empty();
-	nSvrFlg = SKT_NUL_FLG;
+	SetSktFlg(SKT_NUL_FLG);
 	pstrRecvDataBuffer = NULL;
 	pCPrevSocketMgr = NULL;
 	pCNextSocketMgr = NULL;
@@ -27,7 +27,7 @@ SocketMgr::SocketMgr(void)
 SocketMgr::SocketMgr(SocketMgr* pCSocketMgr)
 {
 	nSkt_fd = 0;
-	nSvrFlg = SKT_NUL_FLG;
+	SetSktFlg(SKT_NUL_FLG);
 	pstrRecvDataBuffer = NULL;
 	pCPrevSocketMgr = NULL;
 	pCNextSocketMgr = NULL;
@@ -135,7 +135,7 @@ int SocketMgr::CreateSkt(char * pstrIP,int nPort)
 	setsockopt(nSkt_fd, SOL_SOCKET, SO_SNDTIMEO, (const char *)&timeout, sizeof(timeout));
 
 	setsockopt(nSkt_fd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&timeout, sizeof(timeout));
-	nSvrFlg = SKT_DST_FLG;
+	SetSktFlg(SKT_DST_FLG);
 	return 0;
 }
 
@@ -156,7 +156,6 @@ int SocketMgr::CreateSkt(int nSvrPort, CString strIP)
 		TRACE("create socket err!\r\n");
 		return nRtn;
 	}
-	nSvrFlg = SKT_SVR_FLG; 
     sin.sin_family = AF_INET;  
     sin.sin_port = htons(nSvrPort);
     sin.sin_addr.S_un.S_addr = INADDR_ANY;
@@ -172,8 +171,55 @@ int SocketMgr::CreateSkt(int nSvrPort, CString strIP)
 		TRACE("listen error !");
         return nRtn;  
 	}
+	SetSktFlg(SKT_SVR_FLG);
 	n_port = nSvrPort;
 	m_strIP = strIP;
+	return 0;
+}
+
+int SocketMgr::DeleteSkt(CString strIP, int nPort,int nFlg)
+{
+	nSkt_fd = 0;
+	SetSktFlg(SKT_NUL_FLG);
+	pstrRecvDataBuffer = NULL;
+	pCPrevSocketMgr = NULL;
+	pCNextSocketMgr = NULL;
+	hThread = 0;
+	if( strIP == m_strIP &&
+		nPort == n_port )
+	{
+		delete this;
+		return 0;
+	}
+	if (NULL != pCNextSocketMgr)
+	{
+		pCNextSocketMgr->DeleteSkt(strIP,nPort);
+	}
+	return 0;
+}
+int SocketMgr::SetSktFlg(int nFlg)
+{
+	if(nFlg == SKT_NUL_FLG)
+	{
+		nSvrFlg = nFlg;
+	}
+	else
+	{
+		nSvrFlg |= nFlg;
+	}
+	return 0;
+}
+int SocketMgr::SetSktFlg(CString strIP, int nPort,int nFlg)
+{
+	if( strIP == m_strIP &&
+		nPort == n_port )
+	{
+		return SetSktFlg(nFlg);
+	}
+	if (NULL != pCNextSocketMgr)
+	{
+		pCNextSocketMgr->SetSktFlg(strIP,nPort,nFlg);
+	}
 	return 0;
 }
 SocketMgr * SocketMgr::GetNewSkt()
@@ -217,7 +263,7 @@ int SocketMgr::CreateSkt(SocketMgr* pCSocketSvr)
 	n_port = ntohs(remoteAddr.sin_port);
 	inet_ntop(AF_INET, &remoteAddr.sin_addr.s_addr, strCliIPInfo, 16);
 	mbstowcs_s(&converted, m_strIP.GetBuffer(16), 16, strCliIPInfo, _TRUNCATE);
-	nSvrFlg = SKT_SRC_FLG;
+	SetSktFlg(SKT_SRC_FLG);
 	return 0;
 }
 
@@ -236,7 +282,10 @@ SocketMgr* SocketMgr::GetSktFD(fd_set *pread_fds)
 int SocketMgr::SetSktFD(fd_set *pread_fds)
 {
 	int nMaxfd = 0;
-	FD_SET(nSkt_fd, pread_fds);
+	if((nSvrFlg&SKT_DEL_FLG) != SKT_DEL_FLG)
+	{
+		FD_SET(nSkt_fd, pread_fds);
+	}
 	if(NULL != pCDstSocketMgr && SKT_SRC_FLG == nSvrFlg)
 	{
 		nMaxfd = pCDstSocketMgr->SetSktFD(pread_fds);
@@ -250,7 +299,20 @@ int SocketMgr::SetSktFD(fd_set *pread_fds)
 int SocketMgr::SetSktFD(fd_set *pread_fds, int nMaxfd)
 {
 	//EsxMgr_logDebug("Add fd[%d] to Recd", nSkt_fd);
-	if(SKT_SVR_FLG == nSvrFlg)
+	if(((nSvrFlg&SKT_DEL_FLG) == SKT_DEL_FLG) &&
+		((nSvrFlg&SKT_SVR_FLG) == SKT_SVR_FLG) )
+	{
+		if(0 != nSkt_fd)
+		{
+			TRACE("client disconnection");
+			closesocket(nSkt_fd);
+			nSkt_fd =0;
+			n_port = 0;
+			m_strIP = _T("");
+		}
+		SetSktFlg(SKT_NUL_FLG);
+	}
+	if( ((nSvrFlg&SKT_SVR_FLG) == SKT_SVR_FLG))
 	{
 		FD_SET(nSkt_fd, pread_fds);
 	}
@@ -312,6 +374,11 @@ SocketMgr* SocketMgr::SelectSkt(int nTimeOut,int nType)
 		nMaxFdCount = SetSktFD(&read_fds, nMaxFdCount);
 		break;
 	case 1:
+		if( ((nSvrFlg&SKT_DEL_FLG) == SKT_DEL_FLG) &&
+			((nSvrFlg&SKT_SRC_FLG) == SKT_SRC_FLG))
+		{
+			return this;
+		}
 		nMaxFdCount = SetSktFD(&read_fds);
 		break;
 	}
@@ -327,11 +394,13 @@ SocketMgr* SocketMgr::SelectSkt(int nTimeOut,int nType)
 	select_num = select(nMaxFdCount, &read_fds, NULL, NULL, &select_timeout);
 	if (select_num < 0)
 	{
+		Sleep(100);
 		TRACE("accept error %d", GetLastError());
 		return NULL;
 	}
 	if (select_num == 0)
 	{
+		Sleep(100);
 		return NULL;
 	}
 	return GetSktFD(&read_fds);;
@@ -500,6 +569,10 @@ int SocketMgr::TransData()
 	{
 		return -1;
 	}
+	if(((nSvrFlg&SKT_DEL_FLG) == SKT_DEL_FLG) )
+	{
+		return -2;
+	}
 	if(NULL == pstrRecvData)
 	{
 		pstrRecvData = (char *)malloc(nMallocSize);
@@ -512,7 +585,7 @@ int SocketMgr::TransData()
 	nRectDataLen = RecvData(pstrRecvData, nMallocSize, 1);
 	if (0>nRectDataLen)
 	{
-		return -1;
+		return -3;
 	}
 	if (0 == pCDstSocketMgr->SendData(pstrRecvData, nRectDataLen))
 	{

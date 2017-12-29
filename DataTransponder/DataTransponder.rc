@@ -205,6 +205,7 @@ BEGIN
     POPUP "&View"
     BEGIN
         MENUITEM "&Status Bar",                 ID_VIEW_STATUS_BAR
+        MENUITEM "Hidden",                      ID_VIEW_HIDDEN
     END
     POPUP "&Help"
     BEGIN

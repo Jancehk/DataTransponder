@@ -25,10 +25,12 @@
 #define		ESXSVR_OPT_SUB_GUEST		0x00030000
 
 
-#define SKT_NUL_FLG		0
-#define SKT_SVR_FLG		1
-#define SKT_SRC_FLG		2
-#define SKT_DST_FLG		3
+#define SKT_NUL_FLG		0x00
+#define SKT_SVR_FLG		0x01
+#define SKT_SRC_FLG		0x02
+#define SKT_DST_FLG		0x04
+#define SKT_DEL_FLG		0x08
+
 
 typedef struct ESXMGR_HEADER_T
 {
@@ -87,9 +89,12 @@ public:
 	int CreateSkt(CString strIP, int nPort);
 	int CreateSkt(int nSvrPort, CString strIP);
 	int CreateSkt(SocketMgr* pCSocketSvr);
+	int DeleteSkt(CString strIP, int nPort,int nFlg=SKT_SVR_FLG);
+	int SetSktFlg(int nFlg=SKT_DEL_FLG);
+	int SetSktFlg(CString strIP, int nPort,int nFlg=SKT_DEL_FLG);
 	
 private:
-	int		nSkt_fd;
+	int			nSkt_fd;
 	/* Esx Info Begin */
 	char		strIPInfo[32];
 	char		strCliIPInfo[32];

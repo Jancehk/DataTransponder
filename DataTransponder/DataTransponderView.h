@@ -49,6 +49,10 @@ public:
 	int SetSpeedInItem(int nItem, int nSubItem, int nSpeed);
 	int GetSpeedInItem(int nItem, int nSubItem);
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
+	afx_msg void OnRButtonDown(UINT nFlags, CPoint point);
+	int DelSvrInfo(void);
+	afx_msg void OnRButtonDblClk(UINT nFlags, CPoint point);
+	afx_msg void OnViewHidden();
 };
 
 #ifndef _DEBUG  // debug version in DataTransponderView.cpp
